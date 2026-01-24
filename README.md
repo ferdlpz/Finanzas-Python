@@ -1,8 +1,7 @@
-# 📈 Finanzas Cuantitativas con Python
-# Métodos Cuantitativos en Finanzas 
+# 📈 Finanzas Cuantitativas con Python | Métodos Cuantitativos en Finanzas 
 ## Modelos de Valuación de Activos (CAPM, Multifactor y APT)
 
-Este repositorio contiene los **materiales oficiales del curso universitario de Métodos Cuantitativos en Finanzas**, con énfasis práctico en **modelos de valuación de activos**, combinando teoría financiera, análisis estadístico y aplicación en Python.
+Este repositorio contiene los **materiales del curso Métodos Cuantitativos en Finanzas**, con énfasis práctico en **modelos de valuación de activos**, combinando teoría financiera, análisis estadístico y aplicación en Python.
 
 El curso está diseñado para **pensar como analista cuantitativo**, no para memorizar fórmulas.
 
