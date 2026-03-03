@@ -5,11 +5,16 @@ import pandas as pd
 
 import statsmodels.api as sm
 from scipy import stats
+from scipy.stats import linregress
 
 import matplotlib.pyplot as plt
 
+import yfinance as yf
+
 import warnings
 warnings.filterwarnings("ignore")
+
+key = "7d99d108d429f09277ea5ce381cf96e8"
 
 # %%
 # funciones
@@ -30,6 +35,25 @@ def sharpe_ratio(r, rf=0.0, periods_per_year=252):
     # rf en misma frecuencia que r (si rf anual, conviértelo antes)
     excess = r - rf
     return annualize_mean(excess, periods_per_year) / annualize_vol(r, periods_per_year)
+
+def random_weights(k, n_portfolios=5000):
+    W = np.random.dirichlet(np.ones(k), size=n_portfolios)
+    return W
+
+def portfolio_stats(rets: pd.DataFrame, W: np.ndarray, periods_per_year=252):
+    mu = rets.mean().values
+    Sigma = rets.cov().values
+    port_mu = W @ mu
+    port_var = np.einsum('ij,jk,ik->i', W, Sigma, W)
+    port_vol = np.sqrt(port_var)
+    return (port_mu * periods_per_year, port_vol * np.sqrt(periods_per_year))
+
+def summarize_model(m):
+    out = pd.DataFrame({
+        "coef": m.params,
+        "pval": m.pvalues
+    })
+    return out, m.rsquared
 
 # %% [markdown]
 # ## El mercado NO paga por riesgo diversificable
@@ -64,7 +88,6 @@ print("Vol anual Port(1/3):", annualize_vol(port))
 # # 2 Markowitz frontera eficiente
 
 # %%
-import numpy as np
 A = np.array([[1, 2], [3, 4]])
 B = np.array([[5, 6], [7, 8]])
 print("Matriz A:\n", A)
@@ -76,15 +99,13 @@ resultado = np.einsum('ij,jk->ik', A, B)
 print("Producto matricial A * B:\n", resultado)
 
 # %%
-import numpy as np
-
 # Define concentration parameters (e.g., 3 categories)
 alpha = [10, 5, 1] 
 
 # Generate a single sample (a vector of 3 probabilities summing to 1)
 sample = np.random.dirichlet(alpha)
 print("Single Sample:", sample)
-print("Sum:", np.sum(sample), "\n")
+print("Sum:", np.sum(sample))
 
 # Generate 5 samples
 samples = np.random.dirichlet(alpha, size=5)
@@ -94,18 +115,6 @@ print("\n5 Samples:\n", samples)
 
 
 # %%
-def random_weights(k, n_portfolios=5000):
-    W = np.random.dirichlet(np.ones(k), size=n_portfolios)
-    return W
-
-def portfolio_stats(rets: pd.DataFrame, W: np.ndarray, periods_per_year=252, decimals = 6):
-    mu = rets.mean().values
-    Sigma = rets.cov().values
-    port_mu = W @ mu
-    port_var = np.einsum('ij,jk,ik->i', W, Sigma, W)
-    port_vol = np.sqrt(port_var)
-    return (np.round(port_mu * periods_per_year, decimals), np.round(port_vol * np.sqrt(periods_per_year), decimals))
-
 W = random_weights(3, n_portfolios=8000)
 mu_a, vol_a = portfolio_stats(rets, W)
 
@@ -253,11 +262,9 @@ print("E[Ri] muestral anual:", annualize_mean(df["ASSET"]))
 # 	• Significa que revises: ventana temporal, estabilidad, regime change, datos, etc.
 
 # %% [markdown]
-# # Data Real
+# ## Data Real
 
 # %%
-import yfinance as yf
-
 tickers = ["AAPL", "MSFT", "GOOGL"]
 data = yf.download(tickers, start="2025-01-01", end="2025-12-31", progress=False)["Close"]
 rets = to_returns(data)
@@ -304,8 +311,6 @@ data_bench = yf.download(benchmark, start="2025-01-01", end="2025-12-31", progre
 rets_bench = to_returns(data_bench)
 
 # %%
-from scipy.stats import linregress
-
 returns_benchmark = rets["SPY"].values
 slope, intercept, r_value, p_value, std_err  = linregress(returns_benchmark, rets["AAPL"].values)
 alpha = np.round(intercept, 4)
@@ -466,9 +471,9 @@ print(f"Beta META: {beta:.4f}, Alpha diaria: {alpha:.6f}")
 # $$
 
 # %%
-ric = 'META' #'REP.MC' #'ba' #BBVA.MC # S0
+ric = 'META' #'REP.MC' #'ba' #BBVA.MC
 benchmark = 'SPY'  #  'SPY'   '^STOXX'
-hedge_rics = ['NVDA', 'MSFT'] # S1, S2
+hedge_rics = ['NVDA', 'MSFT']
 delta = 10  #10 M usd
 tickers = [ric] + hedge_rics + [benchmark]
 
@@ -549,12 +554,6 @@ print('Optimal hedge:')
 print(optimal_hedge)
 
 # %%
-ric = 'META' #'REP.MC' #'ba' #BBVA.MC # S0
-benchmark = 'SPY'  #  'SPY'   '^STOXX'
-hedge_rics = ['NVDA', 'MSFT'] # S1, S2
-delta = 10  #10 M usd
-
-
 def cobertura_capm(ric, benchmark, hedge_rics, delta):
     tickers = [ric] + hedge_rics + [benchmark]
     data = yf.download(tickers, start="2025-01-01", end="2025-12-31", progress=False)["Close"]
@@ -581,9 +580,6 @@ def cobertura_capm(ric, benchmark, hedge_rics, delta):
     hedge_delta = np.sum(dataframe['delta'])
     hedge_beta_usd = np.sum(dataframe['beta_usd']) 
     return dataframe, hedge_delta, hedge_beta_usd
-
-dataframe, hedge_delta, hedge_beta_usd = cobertura_capm(ric, benchmark, hedge_rics, delta)
-dataframe.head(len(hedge_rics))
 
 # %%
 ric = 'REP.MC'  #'META' #'REP.MC' #'ba' #BBVA.MC # S0
@@ -700,6 +696,9 @@ df2 = pd.DataFrame({
 print(df2.head(3))
 
 # %%
+df2.head(15)
+
+# %%
 # CAPM
 X1 = sm.add_constant(df2[["MKT_EXCESS"]])
 capm = sm.OLS(df2["ASSET_EXCESS"], X1).fit()
@@ -746,12 +745,185 @@ rf = 0.0
 
 df = pd.DataFrame({
     "ASSET_EXCESS": asset - rf,
-    "MKT_EXCESS": mkt - rf
+    "MKT_EXCESS": mkt - rf,
+    "MSFT": rets["MSFT"] - rf
 }).dropna()
 
 X = sm.add_constant(df["MKT_EXCESS"])
 capm_real = sm.OLS(df["ASSET_EXCESS"], X).fit()
 print(capm_real.summary())
+
+X = sm.add_constant(df[["MKT_EXCESS", "MSFT"]])
+multifactor = sm.OLS(df["ASSET_EXCESS"], X).fit()
+print(multifactor.summary())
+
+
+# %% [markdown]
+# ## Data real: Fama-French-Carhart
+
+# %%
+# !pip install fredapi
+
+# %%
+from fredapi import Fred
+fred = Fred(api_key = key)
+
+# %%
+fred.search('risk free').head(3)
+
+# %%
+# tasa libre de riesgo: 3 meses
+risk_free = fred.get_series('GS3M')
+# risk_free.head(2)
+risk_free = risk_free['2010-01-01':'2026-03-01']
+rf = risk_free/100
+rf.head(5)
+
+# %%
+rf = rf.resample('Q').mean()*3
+rf.head(5)
+
+# %%
+plt.plot(risk_free)
+plt.xlabel('Date')
+plt.ylabel('%')
+plt.title('3-month Treasury Constant Maturity Rate')
+
+# %%
+# GDP 
+gdp = fred.get_series('GDP')
+gdp = gdp['2010-01-01':'2026-03-01']
+gdp.head(5)
+
+# %%
+gdp_growth = gdp.pct_change().dropna()
+gdp_growth.tail()
+
+# %%
+plt.plot(gdp_growth)
+plt.xlabel('Date')
+plt.ylabel('GDP Growth Rate')
+plt.title('GDP Growth, 2010-2026')
+
+# %%
+fred.search('potencial inflation')
+inf = fred.get_series('CPIEALL')
+inf = inf['2010-01-01':'2026-03-01']
+inf.tail()
+
+# %%
+inf_quarterly = inf.resample('Q').mean()
+inf_growth = inf_quarterly.pct_change().dropna()
+inf_growth.tail()
+
+# %%
+plt.plot(inf_growth)
+plt.xlabel('Date')
+plt.ylabel('Inflation Growth Rate')
+plt.title('Inflation Growth Rate, 2010-2026')
+
+# %%
+rics = ['JPM', 'V', 'MA', 'MS', 'GS',
+'XOM','CVX', 'SPY']
+start_date = '2014-01-01'
+end_date = '2026-03-01'
+data = yf.download(rics, start=start_date, interval='3mo', progress=False)["Close"].dropna()
+rets = to_returns(data)
+rets.reset_index(inplace=True)
+print(rets.head(3))
+print("----------------")
+print("Num obs: ", rets.shape[0])
+print("min date:", rets.index.min())
+print("max date:", rets.index.max())
+
+# %%
+# tasa libre de riesgo: 3 meses
+risk_free = fred.get_series('GS3M')
+# risk_free.head(2)
+risk_free = risk_free[start_date:end_date]
+rf = pd.DataFrame(risk_free/100, columns=['rf'])
+rf.reset_index(inplace=True)
+rf.rename(columns={'index': 'Date'}, inplace=True)
+rf['Date'] = pd.to_datetime(rf['Date'])
+print(rf.head(5))
+print("min date:", rf.Date.min())
+print("max date:", rf.Date.max())
+
+
+# %%
+# GDP
+gdp = fred.get_series('A191RP1Q027SBEA')
+# gdp = fred.get_series('GDP')
+gdp = gdp[start_date:end_date]
+gdp = pd.DataFrame(gdp, columns=['gdp'])
+gdp.reset_index(inplace=True)
+gdp.rename(columns={'index': 'Date'}, inplace=True)
+gdp['Date'] = pd.to_datetime(gdp['Date'])
+print(gdp.tail(5))
+print("min date:", gdp.Date.min())
+print("max date:", gdp.Date.max())
+
+# %%
+# inflacion IPC
+fred.search('potencial inflation')
+inf = fred.get_series('CPIEALL')
+inf = inf[start_date:end_date]
+inf = pd.DataFrame(inf, columns=['ipc'])
+inf['Date'] = pd.to_datetime(inf.index)
+print(inf.tail(5))
+print("min date:", inf.Date.min())
+print("max date:", inf.Date.max())
+
+# %%
+inf_quarterly = inf.resample('Q').mean()
+inf_growth = inf_quarterly.pct_change().dropna()
+inf_growth.reset_index(inplace=True)
+inf_growth.rename(columns={'index': 'Date'}, inplace=True)
+inf_growth['Date'] = pd.to_datetime(inf_growth['Date'])
+inf_growth.head()
+
+# %%
+# petroleo
+oil_price = yf.download('USO', start=start_date, interval='3mo', progress=False)['Close']
+oil_price = to_returns(oil_price)
+oil_price.reset_index(inplace=True)
+oil_price.rename(columns={'index': 'Date'}, inplace=True)
+oil_price.head(3)
+
+# %%
+rets.info()
+
+# %%
+df_final = rets.merge( rf, on = 'Date', how='inner').merge(gdp, on = 'Date', how='inner').merge(inf, on = 'Date', how='inner').merge(oil_price.rename(columns={'Close': 'oil_price'}), on = 'Date', how='inner').dropna()
+print("min date:", df_final.Date.min())
+print("max date:", df_final.Date.max())
+
+# %%
+for i in rics:
+  df_final["excess_rend " + str(i)] = df_final[i] - df_final['rf']
+
+# %%
+df_final.rename(columns={'excess_rend SPY': 'market excess'}, inplace=True)
+df_final.columns
+
+# %%
+# Ajuste Chevron con factores macroeconómicos
+y = df_final['excess_rend XOM']
+variables = ['USO', 'gdp', 'excess_rend CVX'] #['market excess', 'gdp', 'ipc', 'oil_price']
+X1 = sm.add_constant(df_final[variables])
+model = sm.OLS(y, X1).fit()
+
+model_table, model_r2 = summarize_model(model)
+
+print("Modelo R2:", model_r2)
+display(model_table)
+print("Resume del modelo:")
+print(model.summary())
+
+# %%
+
+
+# %%
 
 
 
